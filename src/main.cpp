@@ -9,22 +9,29 @@
 #define RST_PIN 0 // RST - D3
 
 #define BUZZER_RELAY_PIN 4 // D2
-#define RELAY_PIN 10 // SD3
+const int RELAY_PIN = D0;
 #define SENSOR_PIN 5 // D1
 
 MFRC522 rfid(SS_PIN, RST_PIN);
 MFRC522::MIFARE_Key key;
 
 String strID;
-String serverName = "http://192.168.1.17:5000/rfid/validate";
+String host = "homscurity.up.railway.app";
 
-const char *ssid = "ZTE";
-const char *password = "999999999";
+const char *ssid = "Punyaku";
+const char *password = "acyc3937";
 int wifiStatus;
+float voltage;
+int bat_percentage;
+int analogInPin  = A0;    // Analog input pin
+int sensorValue;
+float calibration = 0.00; // Check Battery voltage using multimeter & add/subtract the value
 
 void connectWifi();
 bool readRFID();
 bool validateRFID(String strID);
+float mapfloat(float x, float in_min, float in_max, float out_min, float out_max);
+void updateBatPercentage();
 
 void setup() {
   Serial.begin(9600);
@@ -33,7 +40,6 @@ void setup() {
   // Init RFID
   SPI.begin();
   rfid.PCD_Init();
-  Serial.println("\nI am waiting for card...");
 
   // init buzzer & relay
   pinMode(BUZZER_RELAY_PIN, OUTPUT);
@@ -44,20 +50,22 @@ void setup() {
 }
 
 void loop() {
+  updateBatPercentage();
+
   digitalWrite(BUZZER_RELAY_PIN, LOW);
   digitalWrite(RELAY_PIN, HIGH);
-  if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()){
-    if (readRFID()){
+  if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
+    if (readRFID() == true){
       digitalWrite(RELAY_PIN, LOW);
       Serial.println("\nCard valid!");
       delay(7000);
+      digitalWrite(RELAY_PIN, HIGH);
     } else{
       digitalWrite(BUZZER_RELAY_PIN, HIGH);
       Serial.println("\nCard invalid!");
       delay(500);
     }
-  }
-  if(digitalRead(SENSOR_PIN) == HIGH){
+  } else if(digitalRead(SENSOR_PIN) == HIGH){
     Serial.println("Motion detected!");
     digitalWrite(BUZZER_RELAY_PIN, HIGH);
     delay(2000);
@@ -85,6 +93,24 @@ void connectWifi(){
   }
 }
 
+void updateBatPercentage(){
+  sensorValue = analogRead(analogInPin);
+  voltage = (((sensorValue * 3.3) / 1024) * 2 + calibration); //multiply by two as voltage divider network is 100K & 100K Resisto
+  bat_percentage = mapfloat(voltage, 5.0, 7.4, 0, 100); //2.8V as Battery Cut off Voltage & 4.2V as Maximum Voltage
+  
+  if (bat_percentage >= 100)
+  {
+    bat_percentage = 100;
+  }
+  if (bat_percentage <= 0)
+  {
+    bat_percentage = 1;
+  }
+  Serial.println(voltage);
+  Serial.println(String(bat_percentage) + "%");
+  // delay(3000);
+}
+
 bool readRFID(){
   // Serial.print(F("PICC type\t: "));
   // MFRC522::PICC_Type piccType = rfid.PICC_GetType(rfid.uid.sak);
@@ -106,27 +132,61 @@ bool readRFID(){
 }
 
 bool validateRFID(String strID){
-  WiFiClient client;
-  HTTPClient http;
+  WiFiClientSecure client;
 
   const int capacity = JSON_OBJECT_SIZE(2);
   StaticJsonDocument<capacity> doc;
   doc["id"] = (String) strID;
   String json;
   serializeJsonPretty(doc, json);
-  Serial.println(json);
+  // Serial.println(json);
 
-  http.begin(client, serverName);
-  http.addHeader("Content-Type", "application/json");
-  http.addHeader("Authorization", "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjYzMWMxMGM3NTA5MjBmNTg2ZDA1M2RhOCIsInVzZXJuYW1lIjoiUmFuZHkiLCJwYXNzd29yZCI6IiQyYiQxMiRydkQ0cnZrejFkRDJtdUxCV2RxUXhPRkZKV0xXRmxTbXVZdWI5WUw2RjNFL01uOHFIeUlodSIsImlhdCI6MTY2Mjc4OTAxMX0.3B1gXpzdEqsWwOs9Y6jzTRyHw4OmSYHF4Ry359Ex4Ww");
-
-  int httpResponseCode = http.POST(json);
-  Serial.println(httpResponseCode);
-  Serial.println(http.getString());
+  // Use WiFiClient class to create TCP connections
+  const int httpsPort = 443; // 443 is for HTTPS!
   
-  if (httpResponseCode == HTTP_CODE_OK) {
+  client.setInsecure(); // this is the magical line that makes everything work
+  String host = "homscurity.up.railway.app";
+  String endpoint = "/rfid/validate";
+
+  if (!client.connect(host, httpsPort)) {
+    Serial.println("connection failed");
+    return false;
+  }
+
+  // Send the HTTP POST request
+  client.print("POST " + endpoint + " HTTP/1.1\r\n");
+  client.print("Host: " + host + "\r\n");
+  client.print("Content-Type: application/json\r\n");
+  client.print("Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY0M2QwNDg1ODg5ZTM3NGFiMzliMDUzMCIsInVzZXJuYW1lIjoiUmFuZHkiLCJwYXNzd29yZCI6IiQyYiQxMiRVb2EvRDNtOHQza0dmWFRMWW03d3FlSVluYW1GY05nRHphWVRwQ3J1R2NqekJPaTNKOXYuaSIsImlhdCI6MTY4NTA2NTc3NH0.e_7GI4vvvcrtf5HwXkPINcE9ld3hoTXCKACwvk-xNyM\r\n");
+  client.print("Content-Length: " + String(json.length()) + "\r\n");
+  client.print("\r\n");
+  client.print(json);
+
+  // Wait for server's response
+  while (!client.available()) {
+    delay(10);
+  }
+
+  // Read the response status line
+  String responseStatus = client.readStringUntil('\r');
+  Serial.print("Response status: ");
+  Serial.println(responseStatus);
+
+  // Extract the response code from the status line
+  int responseCode = responseStatus.substring(9, 12).toInt();
+  Serial.print("HTTP Response code: ");
+  Serial.println(responseCode);
+
+  Serial.println("closing connection");
+  if (responseCode == 200 || responseCode == 201) {
     return true;
   } else {
     return false;
   }
+}
+
+
+float mapfloat(float x, float in_min, float in_max, float out_min, float out_max)
+{
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }

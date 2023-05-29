@@ -81,7 +81,7 @@ MemoryCheckCommandOptions:
 MemoryCheckSuppressionFile: 
 
 # Coverage
-CoverageCommand: COVERAGE_COMMAND-NOTFOUND
+CoverageCommand: C:/mingw64/bin/gcov.exe
 CoverageExtraFlags: -l
 
 # Testing options
