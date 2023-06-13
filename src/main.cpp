@@ -131,7 +131,7 @@ void updateBatPercentage(){
 
   const int capacity = JSON_OBJECT_SIZE(2);
   StaticJsonDocument<capacity> doc;
-  doc["battery"] =  bat_percentage;
+  doc["battery"] = (String)voltage + (String) "v | " + (String) bat_percentage + (String) "%";
   String json;
   serializeJsonPretty(doc, json);
   // Serial.println(json);
@@ -160,12 +160,6 @@ void updateBatPercentage(){
   while (!client.available()) {
     delay(10);
   }
-
-// Read the response status line
-  String responseStatus = client.readStringUntil('\r');
-  Serial.print("Response status: ");
-  Serial.println(responseStatus);
-
   rfid.PCD_Init();
 }
 
