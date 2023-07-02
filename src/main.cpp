@@ -8,9 +8,9 @@
 #define SS_PIN 2   // SCK - D4
 #define RST_PIN 0 // RST - D3
 
-#define BUZZER_RELAY_PIN 4 // D2
+#define BUZZER_PIN 4 // D2
 const int RELAY_PIN = D0;
-#define SENSOR_PIN 5 // D1
+// #define SENSOR_PIN 5 // D1
 
 MFRC522 rfid(SS_PIN, RST_PIN);
 MFRC522::MIFARE_Key key;
@@ -25,7 +25,7 @@ float voltage;
 int bat_percentage;
 int analogInPin  = A0;    // Analog input pin
 int sensorValue;
-float calibration = 0.72; // Check Battery voltage using multimeter & add/subtract the value
+float calibration = 0.28; // Check Battery voltage using multimeter & add/subtract the value
 
 void connectWifi();
 bool readRFID();
@@ -34,22 +34,22 @@ float mapfloat(float x, float in_min, float in_max, float out_min, float out_max
 void updateBatPercentage();
 
 unsigned long previousTime = 0;
-const unsigned long interval = 10000; // interval waktu dalam milidetik (1 detik)
+const unsigned long interval = 15000; // interval waktu dalam milidetik (1 detik)
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
 
   // Init RFID
   SPI.begin();
   rfid.PCD_Init();
 
   // init buzzer & relay
-  pinMode(BUZZER_RELAY_PIN, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
   pinMode(RELAY_PIN, OUTPUT);
   digitalWrite(RELAY_PIN, HIGH);
 
   // init sensor
-  pinMode(SENSOR_PIN, INPUT);
+  // pinMode(SENSOR_PIN, INPUT);
 }
 
 void loop() {
@@ -57,34 +57,35 @@ void loop() {
 
   unsigned long currentTime = millis();
 
-  // Periksa apakah sudah melewati interval waktu
+  digitalWrite(BUZZER_PIN, LOW);
+  digitalWrite(RELAY_PIN, HIGH);
+  if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
+    if (readRFID() == true){
+      digitalWrite(RELAY_PIN, LOW);
+      Serial.println("\nCard valid!");
+      delay(4000);
+      digitalWrite(RELAY_PIN, HIGH);
+      digitalWrite(RELAY_PIN, HIGH);
+    } else{
+      digitalWrite(BUZZER_PIN, HIGH);
+      Serial.println("\nCard invalid!");
+      delay(500);
+      digitalWrite(BUZZER_PIN, LOW);
+    }
+  } 
+  // else if(digitalRead(SENSOR_PIN) == HIGH){
+  //   Serial.println("Motion detected!");
+  //   // digitalWrite(BUZZER_PIN, HIGH);
+  //   // delay(2000);
+  // }
+
+// Periksa apakah sudah melewati interval waktu
   if (currentTime - previousTime >= interval) {
     previousTime = currentTime; // Simpan waktu saat ini
 
     // Panggil fungsi tugas secara asinkronus
     updateBatPercentage();
   }
-
-
-  digitalWrite(BUZZER_RELAY_PIN, LOW);
-  digitalWrite(RELAY_PIN, HIGH);
-  if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
-    if (readRFID() == true){
-      digitalWrite(RELAY_PIN, LOW);
-      Serial.println("\nCard valid!");
-      delay(7000);
-      digitalWrite(RELAY_PIN, HIGH);
-    } else{
-      digitalWrite(BUZZER_RELAY_PIN, HIGH);
-      Serial.println("\nCard invalid!");
-      delay(500);
-    }
-  } else if(digitalRead(SENSOR_PIN) == HIGH){
-    Serial.println("Motion detected!");
-    digitalWrite(BUZZER_RELAY_PIN, HIGH);
-    delay(2000);
-  }
-
 }
 
 void connectWifi(){
